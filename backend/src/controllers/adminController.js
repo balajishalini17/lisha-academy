@@ -23,6 +23,16 @@ const getUsers = async (req, res) => {
   }
 };
 
+const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const createUser = async (req, res) => {
   try {
     const { fullName, email, username, password, role } = req.body;
@@ -143,47 +153,56 @@ const deleteUser = async (req, res) => {
   }
 };
 
-const suspendUser = async (req, res) => {
+const toggleUserSuspension = async (req, res) => {
   try {
+    const { suspend } = req.body;
+    
+    if (suspend === undefined) {
+      return res.status(400).json({ message: "suspend field is required" });
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { isSuspended: true },
+      { isSuspended: suspend },
       { new: true }
     ).select("-password");
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Notify user of suspension
+    // Notify user of status change
+    const action = suspend ? "suspended" : "restored";
+    const title = suspend ? "Account Suspended" : "Account Restored";
+    const message = suspend 
+      ? "Your account has been suspended. Please contact support for more information."
+      : "Your account has been restored and is now active.";
+
     await notifyUser(user._id, user.email, {
       type: "system",
-      title: "Account Suspended",
-      message: "Your account has been suspended. Please contact support for more information.",
+      title,
+      message,
     });
 
-    res.json({ user, message: "User suspended" });
+    res.json({ user, message: `User ${action}` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-const unsuspendUser = async (req, res) => {
+const getUserStats = async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { isSuspended: false },
-      { new: true }
-    ).select("-password");
+    const totalUsers = await User.countDocuments();
+    const totalAdmins = await User.countDocuments({ role: "admin" });
+    const totalInstructors = await User.countDocuments({ role: "instructor" });
+    const totalStudents = await User.countDocuments({ role: "student" });
+    const suspendedUsers = await User.countDocuments({ isSuspended: true });
 
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Notify user of restoration
-    await notifyUser(user._id, user.email, {
-      type: "system",
-      title: "Account Restored",
-      message: "Your account has been restored and is now active.",
+    res.json({
+      totalUsers,
+      totalAdmins,
+      totalInstructors,
+      totalStudents,
+      suspendedUsers,
     });
-
-    res.json({ user, message: "User unsuspended" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -233,13 +252,27 @@ const getManagedCoursesHistory = async (_req, res) => {
   }
 };
 
+const getAuditLogs = async (req, res) => {
+  try {
+    // Placeholder implementation - adjust based on your audit log model
+    res.json({
+      logs: [],
+      message: "Audit logs endpoint - implement based on your logging system"
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getUsers,
+  getUserById,
   createUser,
   updateUser,
   deleteUser,
-  suspendUser,
-  unsuspendUser,
+  toggleUserSuspension,
+  getUserStats,
   getPendingCourses,
   getManagedCoursesHistory,
+  getAuditLogs,
 };
